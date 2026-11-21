@@ -7,6 +7,7 @@
  * 作者：夜夏和他的白龙女儿
  */
 const NCE_MODULE = 'nai_custom_endpoint';
+let nceGenSeq = 0; // 0=首次（挂源消息），之后都挂最后一条消息
 
 const NCE_DEFAULTS = Object.freeze({
   endpoint: 'https://api.cunzaijiang.cn/v1/images/generations',
@@ -159,6 +160,8 @@ async function nceInsertImageToChat(dataUrl, prompt, preferredIndex) {
       if (!message.extra.media.length && !message.extra.media_display) message.extra.media_display = 'gallery';
       const mediaEntry = { url: dataUrl, type: 'image', title, source: 'generated' };
       message.extra.media.push(mediaEntry);
+      // 翻页模式：gallery（多图轮播，点击切换，不覆盖不堆叠）
+      if (!message.extra.media_display) message.extra.media_display = 'gallery';
       message.extra.inline_image = true;
       message.extra.media_index = message.extra.media.length - 1;
 
@@ -262,7 +265,12 @@ async function nceGenerate() {
     if (!b64) throw new Error('响应里没有图片数据');
     const dataUrl = 'data:image/png;base64,' + b64;
     nceShowImage(dataUrl, prompt);
-    await nceInsertImageToChat(dataUrl, prompt, sourceIndex);
+    const context0 = SillyTavern.getContext();
+    const chatLen = context0.chat ? context0.chat.length : 0;
+    const useSource = (nceGenSeq === 0) && Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < chatLen;
+    const targetIndex = useSource ? sourceIndex : (chatLen - 1);
+    nceGenSeq++;
+    await nceInsertImageToChat(dataUrl, prompt, targetIndex);
     nceStatus('完成 ✅（已插入聊天）');
   } catch (e) {
     nceLog('生成失败', e);
