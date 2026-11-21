@@ -243,16 +243,17 @@
     }
   }
 
-  // 等待酒馆上下文可用再初始化
-  let tries = 0;
-  const timer = setInterval(function () {
-    tries++;
-    if (ctxOrNull()) {
-      clearInterval(timer);
-      init();
-    } else if (tries > 100) {
-      clearInterval(timer);
-      showError('等了很久也没拿到 SillyTavern 上下文，扩展可能被禁用了');
+  // ST 标准初始化：jQuery ready（保证 DOM 与上下文就绪）
+  function boot() {
+    try {
+      if (typeof jQuery === 'function') {
+        jQuery(function () { init(); });
+      } else {
+        window.addEventListener('load', init);
+      }
+    } catch (e) {
+      showError('初始化异常：' + (e && e.message ? e.message : e));
     }
-  }, 200);
+  }
+  boot();
 })();
