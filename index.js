@@ -120,6 +120,63 @@ async function nceInsertImageToChat(dataUrl, prompt) {
     const context = SillyTavern.getContext();
     const chat = context.chat;
     if (!chat || !Array.isArray(chat)) throw new Error('没有聊天上下文');
+
+    const title = (prompt || 'Generated image').slice(0, 80);
+
+    // 找最后一条非用户消息（AI 消息）；没有就最后一条
+    let idx = -1;
+    for (let i = chat.length - 1; i >= 0; i--) {
+      if (chat[i] && !chat[i].is_user) { idx = i; break; }
+    }
+    if (idx < 0 && chat.length > 0) idx = chat.length - 1;
+
+    if (idx >= 0 && typeof context.appendMediaToMessage === 'function') {
+      const message = chat[idx];
+      if (!message.extra || typeof message.extra !== 'object') message.extra = {};
+      if (!Array.isArray(message.extra.media)) message.extra.media = [];
+      if (!message.extra.media.length && !message.extra.media_display) message.extra.media_display = 'gallery';
+      const mediaEntry = { url: dataUrl, type: 'image', title, source: 'generated' };
+      message.extra.media.push(mediaEntry);
+      message.extra.inline_image = true;
+      message.extra.media_index = message.extra.media.length - 1;
+
+      const el = $(`.mes[mesid="${idx}"]`);
+      if (el.length) {
+        context.appendMediaToMessage(message, el, 'adjust');
+      } else {
+        nceLog('消息元素没找到，跳过重渲染');
+      }
+      if (typeof context.saveChat === 'function') await context.saveChat();
+      else if (typeof context.saveChatDebounced === 'function') context.saveChatDebounced();
+      nceLog('图片已附加到消息', idx);
+      return;
+    }
+
+    // 旧版兜底：附加到消息的 extra.image
+    if (idx >= 0) {
+      const message = chat[idx];
+      if (!message.extra || typeof message.extra !== 'object') message.extra = {};
+      message.extra.image = dataUrl;
+      message.extra.inline_image = true;
+      message.extra.title = title;
+      // 尝试重渲染
+      if (typeof context.addOneMessage === 'function') {
+        const el = $(`.mes[mesid="${idx}"]`);
+        if (el.length) el.remove();
+        const slice = chat.slice(0, idx);
+        chat.length = idx;
+        chat.push(message);
+        context.addOneMessage(message);
+        chat.length = 0;
+        Array.prototype.push.apply(chat, slice);
+        chat.push(message);
+      }
+      if (typeof context.saveChat === 'function') await context.saveChat();
+      nceLog('图片已附加（legacy）到消息', idx);
+      return;
+    }
+
+    // 最后兜底：新建消息（聊天为空时）
     const message = {
       name: context.name2 || 'Assistant',
       is_user: false,
@@ -127,22 +184,16 @@ async function nceInsertImageToChat(dataUrl, prompt) {
       send_date: new Date().toISOString(),
       mes: 'Generated image',
       extra: {
-        media: [{ url: dataUrl, type: 'image', title: (prompt || 'Generated image').slice(0, 80), source: 'generated' }],
+        media: [{ url: dataUrl, type: 'image', title, source: 'generated' }],
         media_display: 'gallery',
         media_index: 0,
         inline_image: true,
       },
     };
     chat.push(message);
-    if (typeof context.addOneMessage === 'function') {
-      context.addOneMessage(message);
-    }
-    if (typeof context.saveChat === 'function') {
-      await context.saveChat();
-    } else if (typeof context.saveChatDebounced === 'function') {
-      context.saveChatDebounced();
-    }
-    nceLog('图片已插入聊天');
+    if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
+    if (typeof context.saveChat === 'function') await context.saveChat();
+    nceLog('聊天为空，新建图片消息');
   } catch (e) {
     nceLog('插入聊天失败', e);
     nceError('插入聊天失败：' + (e && e.message ? e.message : e));
@@ -161,8 +212,9 @@ function nceAddSendFormButton() {
       ev.stopPropagation();
       nceGenerate();
     });
-    const right = $('#rightSendForm');
-    if (right.length) right.prepend(btn);
+    const left = $('#leftSendForm');
+    if (left.length) left.append(btn);
+    else if ($('#rightSendForm').length) $('#rightSendForm').prepend(btn);
     else if ($('#send_form').length) $('#send_form').prepend(btn);
     else nceLog('找不到输入栏容器，按钮未添加');
   } catch (e) {
