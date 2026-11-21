@@ -159,18 +159,6 @@ async function nceInsertImageToChat(dataUrl, prompt) {
       message.extra.image = dataUrl;
       message.extra.inline_image = true;
       message.extra.title = title;
-      // 尝试重渲染
-      if (typeof context.addOneMessage === 'function') {
-        const el = $(`.mes[mesid="${idx}"]`);
-        if (el.length) el.remove();
-        const slice = chat.slice(0, idx);
-        chat.length = idx;
-        chat.push(message);
-        context.addOneMessage(message);
-        chat.length = 0;
-        Array.prototype.push.apply(chat, slice);
-        chat.push(message);
-      }
       if (typeof context.saveChat === 'function') await context.saveChat();
       nceLog('图片已附加（legacy）到消息', idx);
       return;
