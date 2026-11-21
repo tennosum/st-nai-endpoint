@@ -1,9 +1,9 @@
 /**
  * NAI 自定义端点（存在酱）for SillyTavern
- * 防御式实现：任何一步失败都会在页面显示错误信息，方便排查
+ * 标准酒馆扩展：设置在「扩展」抽屉里
  * 作者：夜夏和他的白龙女儿
  */
-'use strict';
+jQuery(async () => {
   const MODULE = 'nai_custom_endpoint';
   const DEFAULT_SETTINGS = {
     endpoint: 'https://api.cunzaijiang.cn/v1/images/generations',
@@ -22,39 +22,35 @@
   };
 
   function log() { try { console.log.apply(console, ['[NCE]'].concat([].slice.call(arguments))); } catch (e) {} }
-
   function showError(msg) {
     try {
       let d = document.getElementById('nce-errorbar');
       if (!d) {
         d = document.createElement('div');
         d.id = 'nce-errorbar';
-        d.style.cssText = 'position:fixed;top:8px;left:8px;right:8px;z-index:99999;background:#7a1f1f;color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;white-space:pre-wrap;';
+        d.style.cssText = 'position:fixed;top:8px;left:8px;right:8px;z-index:2147483647;background:#7a1f1f;color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;white-space:pre-wrap;';
         document.body.appendChild(d);
       }
       d.textContent = 'NCE 错误：' + msg;
     } catch (e) {}
   }
 
-  function ctxOrNull() {
-    try { return window.SillyTavern && window.SillyTavern.getContext ? window.SillyTavern.getContext() : null; } catch (e) { return null; }
-  }
+  const ctx = () => SillyTavern.getContext();
 
   function getSettings() {
-    const ctx = ctxOrNull();
-    if (!ctx) throw new Error('拿不到 SillyTavern 上下文（context）');
-    if (!ctx.extensionSettings[MODULE]) {
-      ctx.extensionSettings[MODULE] = Object.assign({}, DEFAULT_SETTINGS);
-      if (ctx.saveSettingsDebounced) ctx.saveSettingsDebounced();
+    const c = ctx();
+    if (!c.extensionSettings[MODULE]) {
+      c.extensionSettings[MODULE] = Object.assign({}, DEFAULT_SETTINGS);
+      c.saveSettingsDebounced();
     }
-    return ctx.extensionSettings[MODULE];
+    return c.extensionSettings[MODULE];
   }
 
   function lastAiText() {
-    const ctx = ctxOrNull();
-    if (!ctx || !ctx.chat) return '';
-    for (let i = ctx.chat.length - 1; i >= 0; i--) {
-      const m = ctx.chat[i];
+    const c = ctx();
+    if (!c || !c.chat) return '';
+    for (let i = c.chat.length - 1; i >= 0; i--) {
+      const m = c.chat[i];
       if (m && !m.is_user && m.mes) return m.mes;
     }
     return '';
@@ -94,27 +90,25 @@
     dl.href = dataUrl;
     dl.download = 'nce_' + Date.now() + '.png';
     dl.textContent = '⬇ 下载';
-    dl.style.cssText = 'flex:1;text-align:center;padding:5px 0;background:#2e2e38;border:1px solid #555;border-radius:6px;color:#eee;text-decoration:none;font-size:12px;';
+    dl.style.cssText = 'flex:1;text-align:center;padding:6px 0;background:#2e2e38;border:1px solid #555;border-radius:6px;color:#eee;text-decoration:none;font-size:12px;';
     bar.appendChild(dl);
     const cp = document.createElement('button');
     cp.textContent = '📋 复制 Prompt';
-    cp.style.cssText = 'flex:1;padding:5px 0;background:#2e2e38;border:1px solid #555;border-radius:6px;color:#eee;font-size:12px;cursor:pointer;';
-    cp.onclick = function () {
-      if (navigator.clipboard) navigator.clipboard.writeText(prompt).then(function () { if (window.toastr) toastr.success('Prompt 已复制'); });
-    };
+    cp.className = 'menu_button';
+    cp.style.flex = '1';
+    cp.onclick = () => { if (navigator.clipboard) navigator.clipboard.writeText(prompt).then(() => toastr.success('Prompt 已复制')); };
     bar.appendChild(cp);
     box.appendChild(bar);
   }
 
   async function generate() {
-    let s;
-    try { s = getSettings(); } catch (e) { showError(e.message); return; }
+    const s = getSettings();
     const prompt = buildPrompt();
-    if (!prompt) { if (window.toastr) toastr.warning('没有找到 <pic prompt>，也没填手动提示词'); return; }
-    if (!s.apiKey) { if (window.toastr) toastr.warning('请先填 API Key'); return; }
+    if (!prompt) { toastr.warning('没有找到 <pic prompt>，也没填手动提示词'); return; }
+    if (!s.apiKey) { toastr.warning('请先填 API Key'); return; }
     setStatus('生成中…');
     const body = {
-      model: s.model, prompt: prompt,
+      model: s.model, prompt,
       negative_prompt: s.negative || undefined,
       size: s.width + 'x' + s.height,
       steps: s.steps, scale: s.scale,
@@ -139,127 +133,76 @@
     }
   }
 
-  function buildPanel() {
-    if (document.getElementById('nce-panel')) return;
-    const panel = document.createElement('div');
-    panel.id = 'nce-panel';
-    panel.style.display = 'none';
-    panel.innerHTML =
-      '<div class="nce-header"><b>NAI 自定义端点</b><span id="nce-close" style="cursor:pointer;padding:0 8px">✕</span></div>' +
-      '<div class="nce-body">' +
-      '<label>端点 URL</label><input id="nce-endpoint" type="text" />' +
-      '<label>API Key</label><input id="nce-apikey" type="password" />' +
-      '<label>模型</label><input id="nce-model" type="text" />' +
-      '<div class="nce-row"><span>宽<input id="nce-width" type="number" /></span><span>高<input id="nce-height" type="number" /></span></div>' +
-      '<div class="nce-row"><span>步数<input id="nce-steps" type="number" /></span><span>CFG<input id="nce-scale" type="number" step="0.1" /></span></div>' +
-      '<label>常见提示词前缀（画师串）</label><textarea id="nce-prefix" rows="2"></textarea>' +
-      '<label>负向提示词</label><textarea id="nce-negative" rows="2"></textarea>' +
-      '<label><input id="nce-usepic" type="checkbox" /> 从最后一条 AI 消息提取 &lt;pic prompt&gt;</label>' +
-      '<label>手动提示词（找不到 tag 时用）</label><textarea id="nce-manual" rows="2"></textarea>' +
-      '<div class="nce-buttons"><button id="nce-save">保存设置</button><button id="nce-gen">🎨 生成</button></div>' +
-      '<div id="nce-status"></div><div id="nce-image"></div>' +
-      '</div>';
-    document.body.appendChild(panel);
+  function fillForm() {
+    const s = getSettings();
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('nce-endpoint', s.endpoint);
+    set('nce-apikey', s.apiKey);
+    set('nce-model', s.model);
+    set('nce-width', s.width);
+    set('nce-height', s.height);
+    set('nce-steps', s.steps);
+    set('nce-scale', s.scale);
+    set('nce-prefix', s.prefix);
+    set('nce-negative', s.negative);
+    set('nce-manual', s.manualPrompt);
+    const cb = document.getElementById('nce-usepic');
+    if (cb) cb.checked = s.usePicTag;
+  }
 
-    let s;
-    try { s = getSettings(); } catch (e) { s = Object.assign({}, DEFAULT_SETTINGS); showError('读取设置失败：' + (e && e.message ? e.message : e)); }
-    panel.querySelector('#nce-endpoint').value = s.endpoint;
-    panel.querySelector('#nce-apikey').value = s.apiKey;
-    panel.querySelector('#nce-model').value = s.model;
-    panel.querySelector('#nce-width').value = s.width;
-    panel.querySelector('#nce-height').value = s.height;
-    panel.querySelector('#nce-steps').value = s.steps;
-    panel.querySelector('#nce-scale').value = s.scale;
-    panel.querySelector('#nce-prefix').value = s.prefix;
-    panel.querySelector('#nce-negative').value = s.negative;
-    panel.querySelector('#nce-usepic').checked = s.usePicTag;
-    panel.querySelector('#nce-manual').value = s.manualPrompt;
-
-    panel.querySelector('#nce-save').onclick = function () {
-      const t = gsSafe();
-      if (!t) return;
-      t.endpoint = panel.querySelector('#nce-endpoint').value.trim();
-      t.apiKey = panel.querySelector('#nce-apikey').value.trim();
-      t.model = panel.querySelector('#nce-model').value.trim() || t.model;
-      t.width = parseInt(panel.querySelector('#nce-width').value) || t.width;
-      t.height = parseInt(panel.querySelector('#nce-height').value) || t.height;
-      t.steps = parseInt(panel.querySelector('#nce-steps').value) || t.steps;
-      t.scale = parseFloat(panel.querySelector('#nce-scale').value) || t.scale;
-      t.prefix = panel.querySelector('#nce-prefix').value;
-      t.negative = panel.querySelector('#nce-negative').value;
-      t.usePicTag = panel.querySelector('#nce-usepic').checked;
-      t.manualPrompt = panel.querySelector('#nce-manual').value;
-      const c = ctxOrNull();
-      if (c && c.saveSettingsDebounced) c.saveSettingsDebounced();
-      if (window.toastr) toastr.success('设置已保存');
+  function bindForm() {
+    const save = document.getElementById('nce-save');
+    if (save) save.onclick = () => {
+      const s = getSettings();
+      const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+      s.endpoint = val('nce-endpoint').trim();
+      s.apiKey = val('nce-apikey').trim();
+      s.model = val('nce-model').trim() || s.model;
+      s.width = parseInt(val('nce-width')) || s.width;
+      s.height = parseInt(val('nce-height')) || s.height;
+      s.steps = parseInt(val('nce-steps')) || s.steps;
+      s.scale = parseFloat(val('nce-scale')) || s.scale;
+      s.prefix = val('nce-prefix');
+      s.negative = val('nce-negative');
+      s.manualPrompt = val('nce-manual');
+      const cb = document.getElementById('nce-usepic');
+      s.usePicTag = cb ? cb.checked : true;
+      ctx().saveSettingsDebounced();
+      toastr.success('设置已保存');
     };
-    panel.querySelector('#nce-gen').onclick = generate;
-    panel.querySelector('#nce-close').onclick = function () { panel.style.display = 'none'; };
+    const gen = document.getElementById('nce-gen');
+    if (gen) gen.onclick = generate;
   }
 
-  function gsSafe() {
-    try { return getSettings(); } catch (e) { showError(e.message); return null; }
-  }
-
-  function togglePanel() {
+  try {
+    let html = '';
     try {
-      console.log('[NCE] 点击画笔按钮');
-      buildPanel();
-      const p = document.getElementById('nce-panel');
-      if (!p) { showError('面板创建失败（panel 不存在）'); return; }
-      const willShow = (p.style.display === 'none' || !p.style.display);
-      p.style.display = willShow ? 'flex' : 'none';
-      console.log('[NCE] 面板切换为', p.style.display);
+      html = await renderExtensionTemplateAsync('third-party/st-nai-endpoint', 'settings');
     } catch (e) {
-      console.error('[NCE] togglePanel 失败', e);
-      showError('打开面板失败：' + (e && e.message ? e.message : e));
+      log('渲染模板失败，用内联兜底', e);
+      html = document.getElementById('nce-inline-fallback')?.outerHTML || '';
     }
-  }
-
-  function buildButton() {
-    if (document.getElementById('nce-fab')) return;
-    const btn = document.createElement('div');
-    btn.id = 'nce-fab';
-    btn.title = 'NAI 自定义端点';
-    btn.textContent = '🎨';
-    btn.onclick = togglePanel;
-    document.body.appendChild(btn);
-
-    // 也放进扩展菜单（如果存在）
-    try {
-      const menu = document.getElementById('extensionsMenu');
-      if (menu && menu.querySelectorAll) {
-        const item = document.createElement('div');
-        item.className = 'extension_container';
-        item.style.cssText = 'padding:6px 10px;cursor:pointer;';
-        item.textContent = '🎨 NAI 自定义端点';
-        item.onclick = togglePanel;
-        menu.appendChild(item);
+    const containers = ['#extensions_settings2', '#extensions_settings', '#extensions_settings_content'];
+    let appended = false;
+    for (const sel of containers) {
+      const el = $(sel);
+      if (el.length > 0) {
+        el.append(html);
+        appended = true;
+        log('已注入到', sel);
+        break;
       }
-    } catch (e) {}
-  }
-
-  function init() {
-    try {
-      buildPanel();
-      buildButton();
-      log('扩展已加载');
-    } catch (e) {
-      log('初始化失败', e);
-      showError(e.message || String(e));
     }
-  }
-
-  // ST 标准初始化：jQuery ready（保证 DOM 与上下文就绪）
-  function boot() {
-    try {
-      if (typeof jQuery === 'function') {
-        jQuery(function () { init(); });
-      } else {
-        window.addEventListener('load', init);
-      }
-    } catch (e) {
-      showError('初始化异常：' + (e && e.message ? e.message : e));
+    if (!appended) {
+      // 最后兜底：放 body 顶部
+      $('body').append(html);
+      log('已注入到 body');
     }
+    fillForm();
+    bindForm();
+    log('扩展初始化完成');
+  } catch (e) {
+    console.error('[NCE] 初始化失败', e);
+    showError('初始化失败：' + (e && e.message ? e.message : e));
   }
-  boot();
+});
