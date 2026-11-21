@@ -114,6 +114,62 @@ function nceShowImage(dataUrl, prompt) {
   box.appendChild(bar);
 }
 
+
+async function nceInsertImageToChat(dataUrl, prompt) {
+  try {
+    const context = SillyTavern.getContext();
+    const chat = context.chat;
+    if (!chat || !Array.isArray(chat)) throw new Error('没有聊天上下文');
+    const message = {
+      name: context.name2 || 'Assistant',
+      is_user: false,
+      is_system: false,
+      send_date: new Date().toISOString(),
+      mes: 'Generated image',
+      extra: {
+        media: [{ url: dataUrl, type: 'image', title: (prompt || 'Generated image').slice(0, 80), source: 'generated' }],
+        media_display: 'gallery',
+        media_index: 0,
+        inline_image: true,
+      },
+    };
+    chat.push(message);
+    if (typeof context.addOneMessage === 'function') {
+      context.addOneMessage(message);
+    }
+    if (typeof context.saveChat === 'function') {
+      await context.saveChat();
+    } else if (typeof context.saveChatDebounced === 'function') {
+      context.saveChatDebounced();
+    }
+    nceLog('图片已插入聊天');
+  } catch (e) {
+    nceLog('插入聊天失败', e);
+    nceError('插入聊天失败：' + (e && e.message ? e.message : e));
+  }
+}
+
+function nceAddSendFormButton() {
+  try {
+    if ($('#nce_send_button').length) return;
+    const btn = $(
+      '<div id="nce_send_button" class="mes_button" title="用当前配置生成图像并插入聊天" style="cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 4px;">' +
+      '<span style="font-size:17px;line-height:1;">🎨</span></div>'
+    );
+    btn.on('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      nceGenerate();
+    });
+    const right = $('#rightSendForm');
+    if (right.length) right.prepend(btn);
+    else if ($('#send_form').length) $('#send_form').prepend(btn);
+    else nceLog('找不到输入栏容器，按钮未添加');
+  } catch (e) {
+    nceLog('添加输入栏按钮失败', e);
+  }
+}
+
 async function nceGenerate() {
   const s = nceSettings();
   const prompt = nceBuildPrompt();
@@ -140,8 +196,10 @@ async function nceGenerate() {
     if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
     const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
     if (!b64) throw new Error('响应里没有图片数据');
-    nceShowImage('data:image/png;base64,' + b64, prompt);
-    nceStatus('完成 ✅');
+    const dataUrl = 'data:image/png;base64,' + b64;
+    nceShowImage(dataUrl, prompt);
+    await nceInsertImageToChat(dataUrl, prompt);
+    nceStatus('完成 ✅（已插入聊天）');
   } catch (e) {
     nceLog('生成失败', e);
     nceStatus('❌ ' + e.message);
@@ -199,6 +257,7 @@ async function nceInit() {
     $('#extensions_settings2').append(settingsHtml);
     nceFillForm();
     nceBindForm();
+    nceAddSendFormButton();
     nceLog('扩展初始化完成');
   } catch (e) {
     nceLog('初始化失败', e);
