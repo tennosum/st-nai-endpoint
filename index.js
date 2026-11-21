@@ -3,8 +3,7 @@
  * 防御式实现：任何一步失败都会在页面显示错误信息，方便排查
  * 作者：夜夏和他的白龙女儿
  */
-(function () {
-  'use strict';
+'use strict';
   const MODULE = 'nai_custom_endpoint';
   const DEFAULT_SETTINGS = {
     endpoint: 'https://api.cunzaijiang.cn/v1/images/generations',
@@ -256,4 +255,3 @@
     }
   }
   boot();
-})();
