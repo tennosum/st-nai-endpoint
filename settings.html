@@ -1,0 +1,50 @@
+<div class="nce-settings">
+  <div class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+      <b>🎨 NAI 自定义端点（存在酱）</b>
+      <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    </div>
+    <div class="inline-drawer-content">
+      <div class="nce-panel-inner">
+        <label>端点 URL</label>
+        <input id="nce-endpoint" type="text" class="text_pole" />
+
+        <label>API Key</label>
+        <input id="nce-apikey" type="password" class="text_pole" />
+
+        <label>模型</label>
+        <input id="nce-model" type="text" class="text_pole" />
+
+        <div class="nce-row">
+          <span>宽 <input id="nce-width" type="number" class="text_pole" /></span>
+          <span>高 <input id="nce-height" type="number" class="text_pole" /></span>
+        </div>
+        <div class="nce-row">
+          <span>步数 <input id="nce-steps" type="number" class="text_pole" /></span>
+          <span>CFG <input id="nce-scale" type="number" step="0.1" class="text_pole" /></span>
+        </div>
+
+        <label>常见提示词前缀（画师串）</label>
+        <textarea id="nce-prefix" rows="3" class="text_pole"></textarea>
+
+        <label>负向提示词</label>
+        <textarea id="nce-negative" rows="3" class="text_pole"></textarea>
+
+        <label class="checkbox_label">
+          <input id="nce-usepic" type="checkbox" />
+          <span>从最后一条 AI 消息提取 &lt;pic prompt&gt;</span>
+        </label>
+
+        <label>手动提示词（找不到 tag 时用）</label>
+        <textarea id="nce-manual" rows="2" class="text_pole"></textarea>
+
+        <div class="nce-buttons">
+          <button id="nce-save" class="menu_button">保存设置</button>
+          <button id="nce-gen" class="menu_button">🎨 生成</button>
+        </div>
+        <div id="nce-status"></div>
+        <div id="nce-image"></div>
+      </div>
+    </div>
+  </div>
+</div>
