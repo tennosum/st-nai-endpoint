@@ -1,14 +1,12 @@
 {
   "display_name": "NAI 自定义端点（存在酱）",
   "loading_order": 100,
-  "requires": [],
-  "optional": [],
   "js": "index.js",
   "css": "style.css",
   "author": "夜夏和他的白龙女儿",
-  "version": "1.0.1",
-  "minimum_client_version": "1.14.0",
+  "version": "1.1.0",
   "homePage": "https://github.com/tennosum/st-nai-endpoint",
   "auto_update": true,
+  "minimum_client_version": "1.14.0",
   "manifest_version": 3
 }
