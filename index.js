@@ -67,16 +67,33 @@ function nceLastAiText() {
 function nceExtractPicPrompt(text) {
   if (!text) return null;
   const m = text.match(/<pic\s+prompt\s*=\s*"([^"]*)"/i);
-  return m ? m[1] : null;
+  return m ? { prompt: m[1], index: -1 } : null;
+}
+
+function nceFindPicSource() {
+  const context = SillyTavern.getContext();
+  if (!context.chat || !context.chat.length) return null;
+  for (let i = context.chat.length - 1; i >= 0; i--) {
+    const m = context.chat[i];
+    if (m && m.mes) {
+      const hit = nceExtractPicPrompt(m.mes);
+      if (hit) { hit.index = i; return hit; }
+    }
+  }
+  return null;
 }
 
 function nceBuildPrompt() {
   const s = nceSettings();
   let base = '';
-  if (s.usePicTag) base = nceExtractPicPrompt(nceLastAiText()) || '';
+  let sourceIndex = -1;
+  if (s.usePicTag) {
+    const hit = nceFindPicSource();
+    if (hit) { base = hit.prompt; sourceIndex = hit.index; }
+  }
   if (!base) base = s.manualPrompt || '';
   if (!base) return null;
-  return [s.prefix, base].filter(Boolean).join(', ');
+  return { prompt: [s.prefix, base].filter(Boolean).join(', '), sourceIndex };
 }
 
 function nceStatus(t) {
@@ -115,7 +132,7 @@ function nceShowImage(dataUrl, prompt) {
 }
 
 
-async function nceInsertImageToChat(dataUrl, prompt) {
+async function nceInsertImageToChat(dataUrl, prompt, preferredIndex) {
   try {
     const context = SillyTavern.getContext();
     const chat = context.chat;
@@ -123,10 +140,15 @@ async function nceInsertImageToChat(dataUrl, prompt) {
 
     const title = (prompt || 'Generated image').slice(0, 80);
 
-    // 找最后一条非用户消息（AI 消息）；没有就最后一条
+    // 优先：提供 tag 的那条消息；否则最后一条非用户消息
     let idx = -1;
-    for (let i = chat.length - 1; i >= 0; i--) {
-      if (chat[i] && !chat[i].is_user) { idx = i; break; }
+    if (Number.isInteger(preferredIndex) && preferredIndex >= 0 && preferredIndex < chat.length && chat[preferredIndex]) {
+      idx = preferredIndex;
+    }
+    if (idx < 0) {
+      for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i] && !chat[i].is_user) { idx = i; break; }
+      }
     }
     if (idx < 0 && chat.length > 0) idx = chat.length - 1;
 
@@ -212,8 +234,10 @@ function nceAddSendFormButton() {
 
 async function nceGenerate() {
   const s = nceSettings();
-  const prompt = nceBuildPrompt();
-  if (!prompt) { if (window.toastr) toastr.warning('没有找到 <pic prompt>，也没填手动提示词'); return; }
+  const built = nceBuildPrompt();
+  if (!built) { if (window.toastr) toastr.warning('没有找到 <pic prompt>，也没填手动提示词'); return; }
+  const prompt = built.prompt;
+  const sourceIndex = built.sourceIndex;
   if (!s.apiKey) { if (window.toastr) toastr.warning('请先填 API Key'); return; }
   nceStatus('生成中…');
   const body = {
@@ -238,7 +262,7 @@ async function nceGenerate() {
     if (!b64) throw new Error('响应里没有图片数据');
     const dataUrl = 'data:image/png;base64,' + b64;
     nceShowImage(dataUrl, prompt);
-    await nceInsertImageToChat(dataUrl, prompt);
+    await nceInsertImageToChat(dataUrl, prompt, sourceIndex);
     nceStatus('完成 ✅（已插入聊天）');
   } catch (e) {
     nceLog('生成失败', e);
